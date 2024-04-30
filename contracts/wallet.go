@@ -5,11 +5,11 @@ type Wallet struct {
 }
 
 type RequestSendMoney struct {
-	To     int     `json:"to"`
+	To     string  `json:"to"`
 	Amount float32 `json:"amount"`
 }
 
 type WalletResponse struct {
-	Id      int     `json:"id"`
+	Id      string  `json:"id"`
 	Balance float32 `json:"balance"`
 }

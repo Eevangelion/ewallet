@@ -39,15 +39,15 @@ func GetConfig() *Config {
 	if Conf == nil {
 		Conf = &Config{
 			Server: &ServerConfig{
-				Address: getEnv("SERVER", "0.0.0.0"),
-				Port:    getEnvAsInt("PORT", 8080),
+				Address: getEnv("SERVER", "localhost"),
+				Port:    getEnvAsInt("PORT", 8000),
 			},
 			DB: &DBInfo{
 				Name:     getEnv("DB_NAME", "wallet"),
 				Host:     getEnv("DB_HOST", "localhost"),
 				Port:     getEnv("DB_PORT", "5432"),
-				User:     getEnv("DB_USER", "wallet"),
-				Password: getEnv("DB_PASSWORD", "password"),
+				User:     getEnv("DB_USER", "postgres"),
+				Password: getEnv("DB_PASSWORD", "root"),
 			},
 		}
 	}

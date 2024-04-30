@@ -15,43 +15,43 @@ import (
 )
 
 type MockWalletService struct {
-	Wallets []models.Wallet
+	Wallets map[string]models.Wallet
 }
 
-func (ms *MockWalletService) Create(balance float32) contracts.WalletResponse {
-	return contracts.WalletResponse{
-		Id:      0,
-		Balance: 100,
-	}
+func (ms *MockWalletService) Create(balance float32) (*contracts.WalletResponse, error) {
+	return &contracts.WalletResponse{
+		Id:      "lol",
+		Balance: balance,
+	}, nil
 }
 
-func (ms *MockWalletService) BalanceTransfer(sender_id int, receiver_id int, amount float32) (err error) {
+func (ms *MockWalletService) BalanceTransfer(sender_id string, receiver_id string, amount float32) (err error) {
 	return err
 }
 
-func (ms *MockWalletService) GetWalletHistory(wal_id int) (err error) {
-	if wal_id >= len(ms.Wallets) {
-		err = errors.New("Can't find wallet")
-	} else {
+func (ms *MockWalletService) GetWalletHistory(wal_id string) (err error) {
+	if _, ok := ms.Wallets[wal_id]; ok {
 		log.Print("Return wallet history")
 		// return wallet history
+	} else {
+		err = errors.New("Can't find wallet")
 	}
 	return err
 }
 
-func (ms *MockWalletService) GetWalletState(wal_id int) (err error) {
-	if wal_id >= len(ms.Wallets) {
-		err = errors.New("Can't find wallet")
-	} else {
+func (ms *MockWalletService) GetWalletState(wal_id string) (err error) {
+	if _, ok := ms.Wallets[wal_id]; ok {
 		log.Print("Return wallet state")
-		// return wallet history
+		// return wallet state
+	} else {
+		err = errors.New("Can't find wallet")
 	}
 	return err
 }
 
 func TestCreateWallet(t *testing.T) {
 	t.Run("can create valid wallet", func(t *testing.T) {
-		expectedWallet := contracts.WalletResponse{Id: 0, Balance: server.DefaultBalance}
+		expectedWallet := contracts.WalletResponse{Id: "lol", Balance: server.DefaultBalance}
 
 		service := &MockWalletService{}
 		server := server.NewWalletServer(service)
@@ -76,11 +76,11 @@ func TestCreateWallet(t *testing.T) {
 		req.Body.Close()
 
 		if wallet.Id != expectedWallet.Id {
-			t.Errorf("expected id %d but got %d", wallet.Id, expectedWallet.Id)
+			t.Errorf("expected id %s but got %s", expectedWallet.Id, wallet.Id)
 		}
 
 		if wallet.Balance != expectedWallet.Balance {
-			t.Errorf("expected balance %f but got %f", wallet.Balance, expectedWallet.Balance)
+			t.Errorf("expected balance %f but got %f", expectedWallet.Balance, wallet.Balance)
 		}
 
 	})
