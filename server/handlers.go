@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	"github.com/Eevangelion/ewallet/contracts"
+	"github.com/Eevangelion/ewallet/logger"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 const (
@@ -17,33 +19,50 @@ func (w *WalletServer) CreateWallet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, nil)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"id":      wal.Id,
-		"balance": wal.Balance,
-	})
+	c.JSON(http.StatusOK, wal)
 }
 
 func (w *WalletServer) SendMoney(c *gin.Context) {
-	wal_id := c.Param("walletId")
+	logger := logger.GetLogger()
+	walId := c.Param("walletId")
 	var req contracts.RequestSendMoney
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Error(
+			"Error while parsing body:",
+			zap.String("event", "parse_body"),
+			zap.String("error", err.Error()),
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w.service.BalanceTransfer(wal_id, req.To, req.Amount)
+	err := w.service.BalanceTransfer(walId, req.To, req.Amount)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.Status(200)
 }
 
 func (w *WalletServer) GetWalletHistory(c *gin.Context) {
-	wal_id := c.Param("walletId")
-	w.service.GetWalletHistory(wal_id)
-	c.Status(200)
+	walId := c.Param("walletId")
+	hist, err := w.service.GetHistory(walId)
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	}
+
+	response := contracts.TransactionHistory{}
+
+	response.TransactionList = hist.TransactionList
+
+	c.JSON(http.StatusOK, response.TransactionList)
 }
 
 func (w *WalletServer) GetWalletState(c *gin.Context) {
-	wal_id := c.Param("walletId")
-	w.service.GetWalletState(wal_id)
+	walId := c.Param("walletId")
+	w.service.GetState(walId)
 	c.Status(200)
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/Eevangelion/ewallet/db/repositories"
 	"github.com/Eevangelion/ewallet/service"
 	"github.com/gin-gonic/gin"
 )
@@ -14,7 +15,8 @@ func GetRouter() *gin.Engine {
 	}
 	r = gin.Default()
 
-	service := service.WalletService{}
+	repo := &repositories.WalletRepository{}
+	service := service.WalletService{Repo: repo}
 	s = NewWalletServer(&service)
 
 	r.POST("/api/v1/wallet", s.CreateWallet)

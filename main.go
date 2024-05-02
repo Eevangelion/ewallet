@@ -2,21 +2,27 @@ package main
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/Eevangelion/ewallet/config"
 	"github.com/Eevangelion/ewallet/db"
+	"github.com/Eevangelion/ewallet/logger"
 	"github.com/Eevangelion/ewallet/server"
+	"go.uber.org/zap"
 )
 
 func main() {
 	conf := config.GetConfig()
-	port := conf.Server.Port
 	r := server.GetRouter()
-	conn, err := db.GetConn()
+	logger := logger.GetLogger()
+	pool, err := db.GetPool()
 	if err != nil {
-		log.Print("Error while connecting to DB:", err.Error())
+		logger.Error(
+			"Error while connecting to DB:",
+			zap.String("event", "connect_database"),
+			zap.String("error", err.Error()),
+		)
 	}
-	defer conn.Close()
+	defer pool.Close()
+	port := conf.Server.Port
 	r.Run(fmt.Sprintf(":%d", port))
 }

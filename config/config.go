@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -13,17 +14,20 @@ type ServerConfig struct {
 	Port    int
 }
 
-type DBInfo struct {
-	Name     string
-	Host     string
-	Port     string
-	User     string
-	Password string
+type DBConfig struct {
+	MaxOpenConns int
+	MinOpenConns int
+	ConnTimeout  time.Duration
+	Name         string
+	Host         string
+	Port         int
+	User         string
+	Password     string
 }
 
 type Config struct {
 	Server *ServerConfig
-	DB     *DBInfo
+	DB     *DBConfig
 }
 
 var Conf *Config = nil
@@ -42,12 +46,15 @@ func GetConfig() *Config {
 				Address: getEnv("SERVER", "localhost"),
 				Port:    getEnvAsInt("PORT", 8000),
 			},
-			DB: &DBInfo{
-				Name:     getEnv("DB_NAME", "wallet"),
-				Host:     getEnv("DB_HOST", "localhost"),
-				Port:     getEnv("DB_PORT", "5432"),
-				User:     getEnv("DB_USER", "postgres"),
-				Password: getEnv("DB_PASSWORD", "root"),
+			DB: &DBConfig{
+				MaxOpenConns: 4,
+				MinOpenConns: 0,
+				ConnTimeout:  time.Second * 5,
+				Name:         getEnv("DB_NAME", "wallet"),
+				Host:         getEnv("DB_HOST", "localhost"),
+				Port:         getEnvAsInt("DB_PORT", 5432),
+				User:         getEnv("DB_USER", "postgres"),
+				Password:     getEnv("DB_PASSWORD", "root"),
 			},
 		}
 	}
