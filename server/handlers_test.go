@@ -59,16 +59,42 @@ func TestSendMoney(t *testing.T) {
 		svc := service.GetWalletService(repo)
 		serv := server.NewWalletServer(svc)
 
-		body := strings.NewReader(fmt.Sprintf(`{"to": %s, "amount": %d }`, receiverId, 110))
+		bodyJson := fmt.Sprintf(`{"to": "%s", "amount": %f }`, receiverId, server.DefaultBalance+1)
 
-		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/wallet/%s/send", senderId), body)
+		body := strings.NewReader(bodyJson)
+
+		url := fmt.Sprintf("/api/v1/wallet/%s/send", senderId)
+
+		req := httptest.NewRequest(http.MethodPost, url, body)
 		w := httptest.NewRecorder()
 
-		c, _ := gin.CreateTestContext(w)
-
+		c, e := gin.CreateTestContext(w)
+		e.POST("/api/v1/wallet/:walletId/send", serv.SendMoney)
 		c.Request = req
+		e.ServeHTTP(w, req)
 
-		serv.SendMoney(c)
+		assertStatus(t, w.Code, http.StatusBadRequest)
+	})
+	t.Run("can't transfer negative amount", func(t *testing.T) {
+		repo := mocks.GetWalletRepository()
+		senderId, _ := repo.Create(server.DefaultBalance)
+		receiverId, _ := repo.Create(server.DefaultBalance)
+		svc := service.GetWalletService(repo)
+		serv := server.NewWalletServer(svc)
+
+		bodyJson := fmt.Sprintf(`{"to": "%s", "amount": %f }`, receiverId, -5.)
+
+		body := strings.NewReader(bodyJson)
+
+		url := fmt.Sprintf("/api/v1/wallet/%s/send", senderId)
+
+		req := httptest.NewRequest(http.MethodPost, url, body)
+		w := httptest.NewRecorder()
+
+		c, e := gin.CreateTestContext(w)
+		e.POST("/api/v1/wallet/:walletId/send", serv.SendMoney)
+		c.Request = req
+		e.ServeHTTP(w, req)
 
 		assertStatus(t, w.Code, http.StatusBadRequest)
 	})
@@ -79,47 +105,76 @@ func TestGetWalletHistory(t *testing.T) {
 		repo := mocks.GetWalletRepository()
 		senderId, _ := repo.Create(server.DefaultBalance)
 		receiverId, _ := repo.Create(server.DefaultBalance)
-		repo.TransferBalance(senderId, receiverId, 50)
+		repo.TransferBalance(senderId, receiverId, 1)
 		svc := service.GetWalletService(repo)
 		serv := server.NewWalletServer(svc)
 
-		body := strings.NewReader(fmt.Sprintf(`{"to": %s, "amount": %d }`, receiverId, 110))
-
-		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/wallet/%s/history", senderId), body)
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/wallet/%s/history", senderId), nil)
 		w := httptest.NewRecorder()
 
-		c, _ := gin.CreateTestContext(w)
-
+		c, e := gin.CreateTestContext(w)
+		e.GET("/api/v1/wallet/:walletId/history", serv.GetWalletHistory)
 		c.Request = req
+		e.ServeHTTP(w, req)
 
-		serv.GetWalletHistory(c)
+		assertStatus(t, w.Code, http.StatusOK)
 
 		var txnHistory contracts.TransactionHistory
 
 		err := json.NewDecoder(w.Body).Decode(&txnHistory.TransactionList)
 		if err != nil {
-			t.Errorf("parse body wallet history error")
+			t.Fatalf("parse body wallet history error")
 		}
 
 		if len(txnHistory.TransactionList) == 0 {
-			t.Errorf("empty wallet history: expected len %d, got %d", 1, 0)
+			t.Fatalf("empty wallet history: expected len %d, got %d", 1, 0)
 		}
+	})
+	t.Run("don't create transaction after not valid transfer", func(t *testing.T) {
+		repo := mocks.GetWalletRepository()
+		senderId, _ := repo.Create(server.DefaultBalance)
+		receiverId, _ := repo.Create(server.DefaultBalance)
+		err := repo.TransferBalance(senderId, receiverId, server.DefaultBalance+1)
+		if err == nil {
+			t.Fatalf("SDFPOKSD{FKSDpfkpoakpofksdp[fkasd]}")
+		}
+		svc := service.GetWalletService(repo)
+		serv := server.NewWalletServer(svc)
+
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/wallet/%s/history", senderId), nil)
+		w := httptest.NewRecorder()
+
+		c, e := gin.CreateTestContext(w)
+		e.GET("/api/v1/wallet/:walletId/history", serv.GetWalletHistory)
+		c.Request = req
+		e.ServeHTTP(w, req)
 
 		assertStatus(t, w.Code, http.StatusOK)
+
+		var txnHistory contracts.TransactionHistory
+
+		err = json.NewDecoder(w.Body).Decode(&txnHistory.TransactionList)
+		if err != nil {
+			t.Fatalf("parse body wallet history error")
+		}
+
+		if len(txnHistory.TransactionList) > 0 {
+			t.Fatalf("not empty wallet history: expected len %d, got %d", 0, 1)
+		}
 	})
 }
 
 func assertStatus(t *testing.T, got int, want int) {
 	if got != want {
-		t.Errorf("wanted http status %d but got %d", want, got)
+		t.Fatalf("wanted http status %d but got %d", want, got)
 	}
 }
 
 func IsWalletValid(t *testing.T, wallet *contracts.WalletResponse) {
 	if wallet.Balance < 0 {
-		t.Errorf("negative balance")
+		t.Fatalf("negative balance")
 	}
 	if err := uuid.Validate(wallet.Id); err != nil {
-		t.Errorf("failed validation of wallet id, got %s", wallet.Id)
+		t.Fatalf("failed validation of wallet id, got %s", wallet.Id)
 	}
 }

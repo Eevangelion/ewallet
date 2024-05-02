@@ -32,7 +32,7 @@ func (w *WalletServer) SendMoney(c *gin.Context) {
 			zap.String("event", "parse_body"),
 			zap.String("error", err.Error()),
 		)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -52,6 +52,7 @@ func (w *WalletServer) GetWalletHistory(c *gin.Context) {
 
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
 	}
 
 	response := contracts.TransactionHistory{}
@@ -63,6 +64,12 @@ func (w *WalletServer) GetWalletHistory(c *gin.Context) {
 
 func (w *WalletServer) GetWalletState(c *gin.Context) {
 	walId := c.Param("walletId")
-	w.service.GetState(walId)
-	c.Status(200)
+	wallet, err := w.service.GetState(walId)
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, wallet)
 }

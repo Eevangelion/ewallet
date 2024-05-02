@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -33,7 +34,11 @@ type Config struct {
 var Conf *Config = nil
 
 func init() {
-	err := godotenv.Load("./.env")
+	projectName := regexp.MustCompile(`^(.*ewallet)`)
+	currentWorkDirectory, _ := os.Getwd()
+	rootPath := projectName.Find([]byte(currentWorkDirectory))
+
+	err := godotenv.Load(string(rootPath) + `/.env`)
 	if err != nil {
 		log.Fatal("Error loading .env file:", err)
 	}

@@ -24,20 +24,20 @@ func GetWalletRepository() *WalletRepository {
 			Wallets: make(map[string]*models.Wallet),
 		}
 	}
+	walletRepo.Wallets = make(map[string]*models.Wallet)
+	walletRepo.Transactions = nil
 	return walletRepo
 }
 
 func (ms *WalletRepository) Create(balance float32) (id string, err error) {
-	id = uuid.New().String()
+	uid := uuid.New()
+	id = uid.String()
 	ms.Wallets[id] = &models.Wallet{Balance: server.DefaultBalance}
 	return
 }
 
 func (ms *WalletRepository) TransferBalance(senderId string, receiverId string, amount float32) (err error) {
 	logger := logger.GetLogger()
-	ms.Wallets[senderId] = &models.Wallet{Balance: server.DefaultBalance}
-	ms.Wallets[receiverId] = &models.Wallet{Balance: server.DefaultBalance}
-
 	if ms.Wallets[senderId].Balance < amount {
 		err = errors.New("sender balance is less than transfer amount")
 		logger.Error(
