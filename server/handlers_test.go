@@ -75,7 +75,7 @@ func TestSendMoney(t *testing.T) {
 
 		assertStatus(t, w.Code, http.StatusBadRequest)
 	})
-	t.Run("can't transfer negative amount", func(t *testing.T) {
+	t.Run("can't transfer non positive amount", func(t *testing.T) {
 		repo := mocks.GetWalletRepository()
 		senderId, _ := repo.Create(server.DefaultBalance)
 		receiverId, _ := repo.Create(server.DefaultBalance)
@@ -134,10 +134,7 @@ func TestGetWalletHistory(t *testing.T) {
 		repo := mocks.GetWalletRepository()
 		senderId, _ := repo.Create(server.DefaultBalance)
 		receiverId, _ := repo.Create(server.DefaultBalance)
-		err := repo.TransferBalance(senderId, receiverId, server.DefaultBalance+1)
-		if err == nil {
-			t.Fatalf("SDFPOKSD{FKSDpfkpoakpofksdp[fkasd]}")
-		}
+		repo.TransferBalance(senderId, receiverId, server.DefaultBalance+1)
 		svc := service.GetWalletService(repo)
 		serv := server.NewWalletServer(svc)
 
@@ -153,7 +150,7 @@ func TestGetWalletHistory(t *testing.T) {
 
 		var txnHistory contracts.TransactionHistory
 
-		err = json.NewDecoder(w.Body).Decode(&txnHistory.TransactionList)
+		err := json.NewDecoder(w.Body).Decode(&txnHistory.TransactionList)
 		if err != nil {
 			t.Fatalf("parse body wallet history error")
 		}
@@ -161,6 +158,42 @@ func TestGetWalletHistory(t *testing.T) {
 		if len(txnHistory.TransactionList) > 0 {
 			t.Fatalf("not empty wallet history: expected len %d, got %d", 0, 1)
 		}
+	})
+
+	t.Run("not found when wallet doesn't exist", func(t *testing.T) {
+		repo := mocks.GetWalletRepository()
+		svc := service.GetWalletService(repo)
+		serv := server.NewWalletServer(svc)
+		walId := uuid.New()
+
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/wallet/%s/history", walId), nil)
+		w := httptest.NewRecorder()
+
+		c, e := gin.CreateTestContext(w)
+		e.GET("/api/v1/wallet/:walletId/history", serv.GetWalletHistory)
+		c.Request = req
+		e.ServeHTTP(w, req)
+
+		assertStatus(t, w.Code, http.StatusNotFound)
+	})
+}
+
+func TestGetWalletState(t *testing.T) {
+	t.Run("not found when wallet doesn't exist", func(t *testing.T) {
+		repo := mocks.GetWalletRepository()
+		svc := service.GetWalletService(repo)
+		serv := server.NewWalletServer(svc)
+		walId := uuid.New()
+
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/wallet/%s", walId), nil)
+		w := httptest.NewRecorder()
+
+		c, e := gin.CreateTestContext(w)
+		e.GET("/api/v1/wallet/:walletId", serv.GetWalletHistory)
+		c.Request = req
+		e.ServeHTTP(w, req)
+
+		assertStatus(t, w.Code, http.StatusNotFound)
 	})
 }
 

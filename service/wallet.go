@@ -5,16 +5,16 @@ import (
 	"time"
 
 	"github.com/Eevangelion/ewallet/contracts"
-	"github.com/Eevangelion/ewallet/logger"
+	"github.com/Eevangelion/ewallet/errs"
 	"github.com/Eevangelion/ewallet/messages"
 	"github.com/Eevangelion/ewallet/utility"
-	"go.uber.org/zap"
 )
 
-func (ws *WalletService) Create(balance float32) (wallet *messages.CreateWallet, err error) {
+func (ws *WalletService) Create(balance float32) (wallet *messages.CreateWallet, err *errs.Err) {
 	id, err := ws.Repo.Create(balance)
 
 	if err != nil {
+		err = errs.WrapErr(err, "Create")
 		return
 	}
 
@@ -26,52 +26,46 @@ func (ws *WalletService) Create(balance float32) (wallet *messages.CreateWallet,
 	return
 }
 
-func (ws *WalletService) BalanceTransfer(senderId string, receiverId string, amount float32) (err error) {
-	logger := logger.GetLogger()
-	if amount < 0 {
-		err = errors.New("negative amount")
-		logger.Error(
-			"Error while getting transfering balance:",
-			zap.String("event", "validate_amount"),
-			zap.String("error", err.Error()),
-		)
+func (ws *WalletService) BalanceTransfer(senderId string, receiverId string, amount float32) (err *errs.Err) {
+	if amount <= 0 {
+		e := errors.New("negative amount")
+		err = errs.NewErr(e, "validate_amount", "bad data")
+		err = errs.WrapErr(err, "BalanceTransfer:")
 		return
 	}
 	if !utility.IsValidUUID(senderId) {
-		err = errors.New("not valid wallet id")
-		logger.Error(
-			"Error while getting transfering balance:",
-			zap.String("event", "validate_sender_id"),
-			zap.String("error", err.Error()),
-		)
+		e := errors.New("not valid wallet id")
+		err = errs.NewErr(e, "validate_sender_id", "bad data")
+		err = errs.WrapErr(err, "BalanceTransfer:")
 		return
 	}
 	if !utility.IsValidUUID(receiverId) {
-		err = errors.New("not valid wallet id")
-		logger.Error(
-			"Error while getting transfering balance:",
-			zap.String("event", "validate_receiver_id"),
-			zap.String("error", err.Error()),
-		)
+		e := errors.New("not valid wallet id")
+		err = errs.NewErr(e, "validate_receiver_id", "bad data")
+		err = errs.WrapErr(err, "BalanceTransfer:")
 		return
 	}
 	err = ws.Repo.TransferBalance(senderId, receiverId, amount)
+	if err != nil {
+		err = errs.WrapErr(err, "BalanceTransfer:")
+	}
 	return
 }
 
-func (ws *WalletService) GetHistory(walId string) (history messages.History, err error) {
-	logger := logger.GetLogger()
+func (ws *WalletService) GetHistory(walId string) (history messages.History, err *errs.Err) {
 	if !utility.IsValidUUID(walId) {
-		err = errors.New("not valid wallet id")
-		logger.Error(
-			"Error while getting wallet history:",
-			zap.String("event", "validate_wallet_id"),
-			zap.String("error", err.Error()),
-		)
+		e := errors.New("not valid wallet id")
+		err = errs.NewErr(e, "validate_wallet_id", "bad data")
+		err = errs.WrapErr(err, "GetHistory:")
 		return
 	}
 
 	txns, err := ws.Repo.GetHistory(walId)
+
+	if err != nil {
+		err = errs.WrapErr(err, "GetHistory:")
+		return
+	}
 
 	for _, txn := range txns {
 		history.TransactionList = append(history.TransactionList, &contracts.Transaction{
@@ -84,15 +78,11 @@ func (ws *WalletService) GetHistory(walId string) (history messages.History, err
 	return
 }
 
-func (ws *WalletService) GetState(walId string) (wallet *messages.GetWalletState, err error) {
-	logger := logger.GetLogger()
+func (ws *WalletService) GetState(walId string) (wallet *messages.GetWalletState, err *errs.Err) {
 	if !utility.IsValidUUID(walId) {
-		err = errors.New("not valid wallet id")
-		logger.Error(
-			"Error while getting wallet history:",
-			zap.String("event", "validate_wallet_id"),
-			zap.String("error", err.Error()),
-		)
+		e := errors.New("not valid wallet id")
+		err = errs.NewErr(e, "validate_wallet_id", "bad data")
+		err = errs.WrapErr(err, "GetState:")
 		return
 	}
 	balance, err := ws.Repo.GetBalance(walId)

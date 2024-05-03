@@ -6,196 +6,187 @@ import (
 	"time"
 
 	"github.com/Eevangelion/ewallet/db"
-	"github.com/Eevangelion/ewallet/logger"
+	"github.com/Eevangelion/ewallet/errs"
 	"github.com/Eevangelion/ewallet/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"go.uber.org/zap"
 )
 
 type WalletRepository struct {
 }
 
-const createWallet = `
-INSERT INTO public."wallet" 
-VALUES ($1, $2) 
-RETURNING id`
+const (
+	SQLCreateWallet = `
+	INSERT INTO public."wallet" 
+	VALUES ($1, $2) 
+	RETURNING id`
 
-func (wr *WalletRepository) Create(balance float32) (id string, err error) {
-	logger := logger.GetLogger()
+	SQLGetBalance = `
+	SELECT balance
+	FROM public."wallet"
+	WHERE id = ($1)`
+
+	SQLChangeBalance = `
+	UPDATE public."wallet"
+	SET balance = ($1)
+	WHERE id = ($2)`
+
+	SQLCreateTransaction = `
+	INSERT INTO public."transaction"(sender_id, receiver_id, amount, time_stamp)
+	VALUES ($1, $2, $3, $4)`
+
+	SQLGetHistory = `
+	SELECT sender_id, receiver_id, amount, time_stamp
+	FROM public."transaction"
+	WHERE sender_id = ($1) OR receiver_id = ($1)`
+
+	SQLCheckWalletExists = `
+	SELECT EXISTS(SELECT 1 FROM public."wallet" WHERE id=($1))`
+)
+
+func (wr *WalletRepository) Create(balance float32) (id string, e *errs.Err) {
 	pool, err := db.GetPool()
 	if err != nil {
-		logger.Error(
-			"Error while connecting to DB:",
-			zap.String("event", "connect_database"),
-			zap.String("error", err.Error()),
-		)
+		e = errs.NewErr(err, "connect_database", "")
+		e = errs.WrapErr(e, "Create:")
 		return
 	}
-	err = pool.QueryRow(context.TODO(), createWallet, uuid.New(), balance).Scan(&id)
+	err = pool.QueryRow(context.TODO(), SQLCreateWallet, uuid.New(), balance).Scan(&id)
 	if err != nil {
-		logger.Error(
-			"Error while creating wallet:",
-			zap.String("event", "create_wallet"),
-			zap.String("error", err.Error()),
-		)
+		e = errs.NewErr(err, "create_wallet", "")
+		e = errs.WrapErr(e, "Create:")
 		return
 	}
 	return
 }
 
-const getBalance = `
-SELECT balance
-FROM public."wallet"
-WHERE id = ($1)`
-
-func (wr *WalletRepository) GetBalance(id string) (balance float32, err error) {
-	logger := logger.GetLogger()
-	pool, err := db.GetPool()
-	if err != nil {
-		logger.Error(
-			"Error while connecting to DB:",
-			zap.String("event", "connect_database"),
-			zap.String("error", err.Error()),
-		)
+func (wr *WalletRepository) GetBalance(id string) (balance float32, err *errs.Err) {
+	pool, e := db.GetPool()
+	if e != nil {
+		err = errs.NewErr(e, "connect_database", "")
+		err = errs.WrapErr(err, "GetBalance:")
 		return
 	}
-	err = pool.QueryRow(context.TODO(), getBalance, id).Scan(&balance)
-	if err != nil {
-		logger.Error(
-			"Error while getting wallet balance:",
-			zap.String("event", "get_balance"),
-			zap.String("error", err.Error()),
-		)
+	e = pool.QueryRow(context.TODO(), SQLGetBalance, id).Scan(&balance)
+	if e != nil {
+		err = errs.NewErr(e, "get_balance", "not found")
+		err = errs.WrapErr(err, "GetBalance:")
 		return
 	}
 	return
 }
 
-const changeBalance = `
-UPDATE public."wallet"
-SET balance = ($1)
-WHERE id = ($2)`
-
-const createTransaction = `
-INSERT INTO public."transaction"(sender_id, receiver_id, amount, time_stamp)
-VALUES ($1, $2, $3, $4)`
-
-func (wr *WalletRepository) TransferBalance(senderId string, receiverId string, amount float32) (err error) {
-	logger := logger.GetLogger()
-	pool, err := db.GetPool()
+func (wr *WalletRepository) TransferBalance(senderId string, receiverId string, amount float32) (err *errs.Err) {
+	pool, e := db.GetPool()
 	if err != nil {
-		logger.Error(
-			"Error while connecting to DB:",
-			zap.String("event", "connect_database"),
-			zap.String("error", err.Error()),
-		)
+		err = errs.NewErr(e, "connect_database", "")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
-	tx, err := pool.BeginTx(context.TODO(), pgx.TxOptions{})
-	if err != nil {
-		logger.Error(
-			"Error while starting transaction:",
-			zap.String("event", "transaction_start"),
-			zap.String("error", err.Error()),
-		)
+	tx, e := pool.BeginTx(context.TODO(), pgx.TxOptions{})
+	if e != nil {
+		err = errs.NewErr(e, "transaction_start", "")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
 	defer tx.Rollback(context.TODO())
 	var senderBalance float32
-	err = pool.QueryRow(context.TODO(), getBalance, senderId).Scan(&senderBalance)
+	e = pool.QueryRow(context.TODO(), SQLGetBalance, senderId).Scan(&senderBalance)
 
-	if err != nil {
-		logger.Error(
-			"Error while getting wallet balance:",
-			zap.String("event", "get_balance"),
-			zap.String("error", err.Error()),
-		)
+	if e != nil {
+		err = errs.NewErr(e, "get_balance", "not found")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
 
 	if senderBalance < amount {
-		err = errors.New("sender balance is less than transfer amount")
-		logger.Error(
-			"Error validating transfer amount:",
-			zap.String("event", "validate_amount"),
-			zap.String("error", err.Error()),
-		)
+		e = errors.New("sender balance is less than transfer amount")
+		err = errs.NewErr(e, "validate_amount", "bad data")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
 
 	var receiverBalance float32
-	err = pool.QueryRow(context.TODO(), getBalance, receiverId).Scan(&receiverBalance)
-	if err != nil {
-		logger.Error(
-			"Error while getting wallet balance:",
-			zap.String("event", "get_balance"),
-			zap.String("error", err.Error()),
-		)
+	e = pool.QueryRow(context.TODO(), SQLGetBalance, receiverId).Scan(&receiverBalance)
+	if e != nil {
+		err = errs.NewErr(e, "get_balance", "not found")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
 
-	_, err = pool.Exec(context.TODO(), changeBalance, senderBalance-amount, senderId)
+	res, e := pool.Exec(context.TODO(), SQLChangeBalance, senderBalance-amount, senderId)
 
-	if err != nil {
-		logger.Error(
-			"Error while changing wallet balance balance:",
-			zap.String("event", "change_balance"),
-			zap.String("error", err.Error()),
-		)
+	if e != nil {
+		err = errs.NewErr(e, "change_balance", "")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
 
-	_, err = pool.Exec(context.TODO(), changeBalance, receiverBalance+amount, receiverId)
-
-	if err != nil {
-		logger.Error(
-			"Error while changing wallet balance:",
-			zap.String("event", "change_balance"),
-			zap.String("error", err.Error()),
-		)
+	if res.RowsAffected() == 0 {
+		err = errs.NewErr(e, "change_balance", "not found")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
 
-	_, err = pool.Query(context.TODO(), createTransaction, senderId, receiverId, amount, time.Now())
+	res, e = pool.Exec(context.TODO(), SQLChangeBalance, receiverBalance+amount, receiverId)
 
-	if err != nil {
-		logger.Error(
-			"Error while creating transfer transaction:",
-			zap.String("event", "create_transfer_transaction"),
-			zap.String("error", err.Error()),
-		)
+	if e != nil {
+		err = errs.NewErr(e, "change_balance", "")
+		err = errs.WrapErr(err, "TransferBalance:")
 		return
 	}
 
-	err = tx.Commit(context.TODO())
+	if res.RowsAffected() == 0 {
+		err = errs.NewErr(e, "change_balance", "not found")
+		err = errs.WrapErr(err, "TransferBalance:")
+		return
+	}
+
+	_, e = pool.Exec(context.TODO(), SQLCreateTransaction, senderId, receiverId, amount, time.Now())
+
+	if e != nil {
+		err = errs.NewErr(e, "create_transfer_transaction", "")
+		err = errs.WrapErr(err, "TransferBalance:")
+		return
+	}
+
+	e = tx.Commit(context.TODO())
+
+	if e != nil {
+		err = errs.NewErr(e, "commit_transaction", "")
+		err = errs.WrapErr(err, "TransferBalance:")
+	}
 	return
 }
 
-const getHistory = `
-SELECT sender_id, receiver_id, amount, time_stamp
-FROM public."transaction"
-WHERE sender_id = ($1) OR receiver_id = ($1)`
-
-func (wr *WalletRepository) GetHistory(id string) (txns []*models.Transcation, err error) {
-	logger := logger.GetLogger()
-	pool, err := db.GetPool()
-	if err != nil {
-		logger.Error(
-			"Error while connecting to DB:",
-			zap.String("event", "connect_database"),
-			zap.String("error", err.Error()),
-		)
+func (wr *WalletRepository) GetHistory(id string) (txns []*models.Transcation, err *errs.Err) {
+	pool, e := db.GetPool()
+	if e != nil {
+		err = errs.NewErr(e, "connect_database", "")
+		err = errs.WrapErr(err, "GetHistory:")
 		return
 	}
-	rows, err := pool.Query(context.TODO(), getHistory, id)
 
-	if err != nil {
-		logger.Error(
-			"Error while getting history:",
-			zap.String("event", "get_transfer_history"),
-			zap.String("error", err.Error()),
-		)
+	var exists bool
+	e = pool.QueryRow(context.TODO(), SQLCheckWalletExists, id).Scan(&exists)
+
+	if e != nil {
+		err = errs.NewErr(e, "check_if_wallet_exists", "")
+		err = errs.WrapErr(err, "GetHistory:")
+		return
+	}
+	if !exists {
+		e = errors.New("wallet not exists")
+		err = errs.NewErr(e, "check_if_wallet_exists", "not found")
+		err = errs.WrapErr(err, "GetHistory:")
+		return
+	}
+
+	rows, e := pool.Query(context.TODO(), SQLGetHistory, id)
+
+	if e != nil {
+		err = errs.NewErr(e, "get_transfer_history", "")
+		err = errs.WrapErr(err, "GetHistory:")
 		return
 	}
 
@@ -203,24 +194,18 @@ func (wr *WalletRepository) GetHistory(id string) (txns []*models.Transcation, e
 
 	for rows.Next() {
 		var txn models.Transcation
-		err = rows.Scan(&txn.SenderId, &txn.ReceiverId, &txn.Amount, &txn.Timestamp)
-		if err != nil {
-			logger.Error(
-				"Error while scanning rows:",
-				zap.String("event", "scan_rows"),
-				zap.String("error", err.Error()),
-			)
+		e = rows.Scan(&txn.SenderId, &txn.ReceiverId, &txn.Amount, &txn.Timestamp)
+		if e != nil {
+			err = errs.NewErr(e, "scan_rows", "")
+			err = errs.WrapErr(err, "GetHistory:")
 			return
 		}
 		txns = append(txns, &txn)
 	}
 
-	if err = rows.Err(); err != nil {
-		logger.Error(
-			"Error while reading rows:",
-			zap.String("event", "read_rows"),
-			zap.String("error", err.Error()),
-		)
+	if e = rows.Err(); err != nil {
+		err = errs.NewErr(e, "read_rows", "")
+		err = errs.WrapErr(err, "GetHistory:")
 		return
 	}
 

@@ -1,14 +1,15 @@
 package repositories
 
 import (
+	"github.com/Eevangelion/ewallet/errs"
 	"github.com/Eevangelion/ewallet/models"
 )
 
 type IWalletRepository interface {
-	Create(float32) (string, error)
-	GetBalance(string) (float32, error)
-	GetHistory(string) ([]*models.Transcation, error)
-	TransferBalance(string, string, float32) error
+	Create(float32) (string, *errs.Err)
+	GetBalance(string) (float32, *errs.Err)
+	GetHistory(string) ([]*models.Transcation, *errs.Err)
+	TransferBalance(string, string, float32) *errs.Err
 }
 
 var walletRepo *WalletRepository
